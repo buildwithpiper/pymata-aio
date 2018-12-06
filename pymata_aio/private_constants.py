@@ -15,6 +15,7 @@
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 """
 
+import numpy as np
 
 class PrivateConstants:
     """
@@ -102,4 +103,38 @@ class PrivateConstants:
 
     # Pin used to store Pixy data
     PIN_PIXY_MOSI = 11
+
+    # Piper Command Center HID commands
+    HID_GET = 0x00
+    HID_SET = 0x01
+    HID_RESPONSE = 0x02
+    COMMAND_CENTER_BUTTON_RESPONSE = 0x03
+    COMMAND_CENTER_JOYSTICK_RESPONSE = 0x04
+
+    # Piper Command Center HID pins
+    HID_BUTTON_UP = 6
+    HID_BUTTON_DOWN = 7
+    HID_BUTTON_LEFT = 8
+    HID_BUTTON_RIGHT = 9
+    HID_BUTTON_JOYSTICK = 13
+
+    # Piper Command Center HID joystick directional codes
+    HID_JOYSTICK_UP = 0
+    HID_JOYSTICK_UP_RIGHT = 1
+    HID_JOYSTICK_RIGHT = 2
+    HID_JOYSTICK_DOWN_RIGHT = 3
+    HID_JOYSTICK_DOWN = 4
+    HID_JOYSTICK_DOWN_LEFT = 5
+    HID_JOYSTICK_LEFT = 6
+    HID_JOYSTICK_UP_LEFT = 7
+    HID_JOYSTICK_NONE = 8
+
+    # Piper Command Center HID setting codes
+    HID_ENABLED = 100
+    HID_SETTINGS_JS_SENSITIVITY = 101
+    HID_SETTING_JS_INVERTED = 102
+
+    # Arduino Mouse Action Codes
+    MOUSE_LEFT = 1
+    MOUSE_RIGHT = 2
 

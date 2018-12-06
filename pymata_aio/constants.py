@@ -1,6 +1,7 @@
 """
  Copyright (c) 2015-2017 Alan Yorinks All rights reserved.
-
+ Modifications made 2018 by John Chen
+ 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU AFFERO GENERAL PUBLIC LICENSE
  Version 3 as published by the Free Software Foundation; either
@@ -15,6 +16,7 @@
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 """
 
+import numpy as np
 
 class Constants:
     """
@@ -90,3 +92,24 @@ class Constants:
     LATCH_CALL_BACK_DATA = 1
     LATCH_CALLBACK_TIME_STAMP = 2
 
+    # Piper Command Center HID commands
+    HID_GET = 0x00
+    HID_SET = 0x01
+    HID_RESPONSE = 0x02
+    COMMAND_CENTER_RESPONSE = 0x03
+
+    # Piper Command Center HID pins
+    HID_BUTTON_UP = np.uint8(6)
+    HID_BUTTON_DOWN = np.uint8(7)
+    HID_BUTTON_LEFT = np.uint8(8)
+    HID_BUTTON_RIGHT = np.uint8(9)
+    HID_BUTTON_JOYSTICK = np.uint8(13)
+
+    # Piper Command Center HID setting codes
+    HID_ENABLED = np.uint8(100)
+    HID_SETTINGS_JS_SENSITIVITY = np.uint8(101)
+    HID_SETTING_JS_INVERTED = np.uint8(102)
+
+    # Arduino Mouse Action Codes
+    MOUSE_LEFT = 1
+    MOUSE_RIGHT = 2

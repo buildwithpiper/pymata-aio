@@ -21,13 +21,14 @@ import glob
 import logging
 import sys
 import time
+import numpy as np
 
 # noinspection PyPackageRequirements
 import serial
 
-from pymata_aio.constants import Constants
+from constants import Constants
 from pymata_aio.pin_data import PinData
-from pymata_aio.private_constants import PrivateConstants
+from private_constants import PrivateConstants
 from pymata_aio.pymata_serial import PymataSerial
 from pymata_aio.pymata_socket import PymataSocket
 
@@ -127,7 +128,17 @@ class PymataCore:
                                    PrivateConstants.ENCODER_DATA:
                                        self._encoder_data,
                                    PrivateConstants.PIXY_DATA:
-                                       self._pixy_data}
+                                       self._pixy_data,
+                                   PrivateConstants.HID_GET:
+                                       self._hid_get,
+                                   PrivateConstants.HID_SET:
+                                       self._hid_set,
+                                   PrivateConstants.HID_RESPONSE:
+                                       self._hid_response,
+                                   PrivateConstants.COMMAND_CENTER_BUTTON_RESPONSE:
+                                       self._command_center_button_response,
+                                   PrivateConstants.COMMAND_CENTER_JOYSTICK_RESPONSE:
+                                       self._command_center_joystick_response}
 
         # report query results are stored in this dictionary
         self.query_reply_data = {PrivateConstants.REPORT_VERSION: '',
@@ -135,7 +146,8 @@ class PymataCore:
                                  PrivateConstants.REPORT_FIRMWARE: '',
                                  PrivateConstants.CAPABILITY_RESPONSE: None,
                                  PrivateConstants.ANALOG_MAPPING_RESPONSE: None,
-                                 PrivateConstants.PIN_STATE_RESPONSE: None}
+                                 PrivateConstants.PIN_STATE_RESPONSE: None,
+                                 PrivateConstants.HID_RESPONSE: None}
 
         # An i2c_map entry consists of a device i2c address as the key, and
         #  the value of the key consists of a dictionary containing 3 entries.
@@ -207,7 +219,6 @@ class PymataCore:
                          ' Copyright (c) 2015-2018 Alan Yorinks All rights reserved.'
             logging.info(log_string)
         else:
-
             print('{}{}{}'.format('\n', 'pymata_aio Version ' +
                                   PrivateConstants.PYMATA_VERSION,
                                   '\tCopyright (c) 2015-2018 Alan Yorinks All '
@@ -230,7 +241,6 @@ class PymataCore:
                 logging.info(log_string)
             else:
                 print('{}{}\n'.format('Using COM Port:', self.com_port))
-
 
         self.sleep_tune = sleep_tune
 
@@ -376,11 +386,9 @@ class PymataCore:
         It is intended for use by applications that directly uses asyncio.
 
         :returns: No return value.
-         """
-
+        """
         # pick the desired transport and then setup read and write to
         # point to the correct method for the transport
-
         # check if user specified a socket transport
         if self.ip_address:
             self.socket = PymataSocket(self.ip_address, self.ip_port, self.loop)
@@ -404,7 +412,7 @@ class PymataCore:
             except serial.SerialException:
                 if self.log_output:
                     log_string = 'Cannot instantiate serial interface: ' + \
-                                 self.com_port
+                                    self.com_port
                     logging.exception(log_string)
                 else:
                     print(
@@ -1190,7 +1198,11 @@ class PymataCore:
             self.loop.close()
         except:
             pass
-        sys.exit(0)
+        
+        try:
+            sys.exit(0)
+        except:
+            pass
 
     async def sleep(self, sleep_time):
         """
@@ -2019,7 +2031,6 @@ class PymataCore:
             for d in sysex_data:
                 sysex_message += chr(d)
         sysex_message += chr(PrivateConstants.END_SYSEX)
-
         for data in sysex_message:
             await self.write(data)
 
@@ -2040,3 +2051,86 @@ class PymataCore:
             current_command.append(next_command_byte)
             number_of_bytes -= 1
         return current_command
+
+    async def _hid_response(self, data):
+        """
+        This handles human interface device query response messages.
+
+        :param data: HID state message
+
+        :returns: None - but response is saved
+        """
+        self.query_reply_data[PrivateConstants.HID_RESPONSE] = data[1:-1]
+
+    async def _hid_set(self, hid_config_code, value):
+        """
+        Sets the response value for a given HID code
+        This is used for giving a particular button a 'return value'
+        """
+        data = [hid_config_code, value]
+        await self._send_sysex(PrivateConstants.HID_SET, data)
+
+    async def _hid_get(self, hid_config_code):
+        """
+        This method retrieves the value for a given code for the HID
+        Used for reading the value mapped to a button
+
+        :param hid_config_code: 
+
+        :returns: programmed value corresponding HID code/button
+        """
+        await self._send_sysex(PrivateConstants.HID_GET, [hid_config_code])
+        while self.query_reply_data.get(
+                PrivateConstants.HID_RESPONSE) is None:
+            await asyncio.sleep(self.sleep_tune)
+        hid_state_report = self.query_reply_data.get(
+                PrivateConstants.HID_RESPONSE)
+        self.query_reply_data[PrivateConstants.HID_RESPONSE] = None
+        return hid_state_report
+
+    def button_name(self, button_code):
+        return {
+            Constants.HID_BUTTON_UP: 'up',
+            Constants.HID_BUTTON_DOWN: 'down',
+            Constants.HID_BUTTON_LEFT: 'left',
+            Constants.HID_BUTTON_RIGHT: 'right',
+            Constants.HID_BUTTON_JOYSTICK: 'joystick'
+        }[button_code]
+
+    async def _command_center_button_response(self, data):
+        button = self.button_name(data[1]).upper()
+        action = data[2]
+        buttonStatus = "DOWN" if data[3] else "UP"
+
+        if action == PrivateConstants.MOUSE_LEFT:
+            action = "Left Mouse Button"
+        elif action == PrivateConstants.MOUSE_RIGHT:
+            action = "Right Mouse Button"
+        else:
+            action = chr(action)
+
+        print("CC_EVENT: {} BUTTON {}, ACTION: '{}'".format(button, buttonStatus, action))
+
+    def direction_name(self, direction_code):
+        return {
+            PrivateConstants.HID_JOYSTICK_UP: 'UP',
+            PrivateConstants.HID_JOYSTICK_UP_RIGHT: 'UP-RIGHT',
+            PrivateConstants.HID_JOYSTICK_RIGHT: 'RIGHT',
+            PrivateConstants.HID_JOYSTICK_DOWN_RIGHT: 'DOWN-RIGHT',
+            PrivateConstants.HID_JOYSTICK_DOWN: 'DOWN',
+            PrivateConstants.HID_JOYSTICK_DOWN_LEFT: 'DOWN-LEFT',
+            PrivateConstants.HID_JOYSTICK_LEFT: 'LEFT',
+            PrivateConstants.HID_JOYSTICK_UP_LEFT: 'UP-LEFT',
+            PrivateConstants.HID_JOYSTICK_NONE: 'NONE'
+        }[direction_code]
+
+    async def _command_center_joystick_response(self, data):
+        direction = self.direction_name(data[1])
+        pitch = np.int8(data[2])
+        yaw = np.int8(data[3])
+        print("CC_EVENT: JOYSTICK, D: {}, P: {}, Y: {}".format(direction, pitch, yaw))
+
+if __name__ == "__main__":
+    print("Initializing Board...")
+    board = PymataCore()
+    board.start_aio()
