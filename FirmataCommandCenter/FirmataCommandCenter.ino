@@ -50,7 +50,8 @@
 
 /* HID constants */
 #define HID_RESPONSE 0x02
-#define COMMAND_CENTER_RESPONSE 0x03
+#define COMMAND_CENTER_BUTTON_RESPONSE 0x03
+#define COMMAND_CENTER_JOYSTICK_RESPONSE 0x04
 
 // button ids (also pin numbers)
 #define HID_BUTTON_UP 6
@@ -59,6 +60,17 @@
 #define HID_BUTTON_RIGHT 9
 #define HID_BUTTON_JOYSTICK 13
 
+// Joystick directional codes - space left for octagonal
+#define HID_JOYSTICK_UP 0
+#define HID_JOYSTICK_UP_RIGHT 1
+#define HID_JOYSTICK_RIGHT 2
+#define HID_JOYSTICK_DOWN_RIGHT 3
+#define HID_JOYSTICK_DOWN 4
+#define HID_JOYSTICK_DOWN_LEFT 5
+#define HID_JOYSTICK_LEFT 6
+#define HID_JOYSTICK_UP_LEFT 7
+#define HID_JOYSTICK_NONE 8
+
 // config ids
 #define HID_ENABLED 100
 #define HID_SETTING_JS_SENSITIVITY 101
@@ -66,6 +78,7 @@
 
 // the minimum interval for sampling analog input
 #define MINIMUM_SAMPLING_INTERVAL 1
+
 
 /*==============================================================================
  * GLOBAL VARIABLES
@@ -88,7 +101,7 @@ byte portConfigInputs[TOTAL_PORTS]; // each bit: 1 = pin in INPUT, 0 = anything 
 /* timer variables */
 unsigned long currentMillis;        // store the current value from millis()
 unsigned long previousMillis;       // for comparison with currentMillis
-unsigned int samplingInterval = 19; // how often to run the main loop (in ms)
+unsigned int samplingInterval = 1000; // how often to run the main loop (in ms)
 
 /* HID variables and constants */
 const uint8_t hidJoystickYawAxis = A1;                     // joystick X axis
@@ -110,6 +123,14 @@ char hidMappingJoystickPress = KEY_LEFT_SHIFT;
 /* configurable HID Joystick settings */
 int8_t hidSettingJoystickSensitivity = 0; // [-100, 100]
 bool hidSettingJoystickInverted = false;
+
+/* HID buttons down/up status - some unused array elements to make code cleaner*/
+bool isButtonPressRecorded[HID_BUTTON_JOYSTICK+1] {false};
+
+/* HID joystick status - used to only signal JS state changes vs constant messaging */
+int8_t previousYawReading = 0;
+int8_t previousPitchReading = 0;
+
 
 /* i2c data */
 struct i2c_device_info
@@ -1053,11 +1074,12 @@ void toggleHID(bool enabled)
 
 void doHID()
 {
-  // joystick movement
-  int yawReading = readAxis(hidJoystickYawAxis);
-  int pitchReading = readAxis(hidJoystickPitchAxis);
-  Mouse.move(yawReading, pitchReading, 0);
+  joystickMovementAndReport();
+  checkButtonsForChanges();
+}
 
+void checkButtonsForChanges()
+{
   // button presses
   doButton(HID_BUTTON_UP, hidMappingDPadUp);
   doButton(HID_BUTTON_DOWN, hidMappingDPadDown);
@@ -1068,46 +1090,72 @@ void doHID()
 
 void doButton(uint8_t button, char action)
 {
-  
+    if (isButtonPressChanged(button))
+    {
+      toggleAndRecord(button, action);
+      reportCommandCenterButtonAction(button, action);
+    }
+}
+
+boolean isButtonPressChanged(uint8_t button)
+{
+  return ((digitalRead(button) == LOW) != isButtonPressRecorded[button]);
+}
+
+void toggleAndRecord(uint8_t button, char action)
+{
   if (action == MOUSE_LEFT || action == MOUSE_RIGHT)
   {
-    if (digitalRead(button) == LOW)
-    {
-      if (!Mouse.isPressed(action))
-      {
-        // Mouse.press(action);
-        reportCommandCenterAction(button, action);
-      }
-    }
-    else
-    {
-      if (Mouse.isPressed(action))
-      {
-        Mouse.release(action);
-      }
-    }
+    mouseToggle(action);
+  } 
+  else 
+  {
+    keyboardToggle(button, action);
+  }
+  isButtonPressRecorded[button] = !isButtonPressRecorded[button];
+}
+
+void mouseToggle(char action)
+{
+  if (Mouse.isPressed(action))
+  {
+    Mouse.release(action);
   }
   else
   {
-    if (digitalRead(button) == LOW)
-    {
-      // Keyboard.press(action);
-      reportCommandCenterAction(button, action);
-    }
-    else
-    {
-      Keyboard.release(action);
-    }
+//    Mouse.press(action);
   }
 }
 
-void reportCommandCenterAction(uint8_t button, char action)
+void keyboardToggle(uint8_t button, char action)
+{
+  if (digitalRead(button) == LOW)
+  {
+//    Keyboard.press(action);
+  }
+  else
+  {
+    Keyboard.release(action);
+  }
+}
+
+void reportCommandCenterButtonAction(uint8_t button, char action)
 {
     Firmata.write(START_SYSEX);
-    Firmata.write(COMMAND_CENTER_RESPONSE);
+    Firmata.write(COMMAND_CENTER_BUTTON_RESPONSE);
     Firmata.write(button);
     Firmata.write(action);
+    Firmata.write(isButtonPressRecorded[button]);
     Firmata.write(END_SYSEX);
+}
+
+void joystickMovementAndReport()
+{
+  int yawReading = readAxis(hidJoystickYawAxis);
+  int pitchReading = readAxis(hidJoystickPitchAxis);
+  
+  Mouse.move(yawReading, pitchReading, 0);
+  attemptJoystickReport(yawReading, pitchReading);
 }
 
 /* reads an axis (data pin) and scales the analog input range to a range
@@ -1131,6 +1179,79 @@ int readAxis(int thisAxis)
 
   // return the distance for this axis:
   return distance;
+}
+
+void attemptJoystickReport(int yaw, int pitch)
+{  
+  if (isJoystickPositionChanged(yaw, pitch))
+  {
+    previousYawReading = yaw;
+    previousPitchReading = pitch;
+    reportCommandCenterJoystickMove(yaw, pitch);
+  }
+}
+boolean isJoystickPositionChanged(int yawReading, int pitchReading)
+{
+  return ((yawReading != previousYawReading) || (pitchReading != previousPitchReading));
+}
+
+void reportCommandCenterJoystickMove(int yaw, int pitch)
+{
+    Firmata.write(START_SYSEX);
+    Firmata.write(COMMAND_CENTER_JOYSTICK_RESPONSE);
+    Firmata.write(getJoystickDirectionalCode(yaw, pitch));
+    Firmata.write(yaw);
+    Firmata.write(pitch);
+    Firmata.write(END_SYSEX);
+}
+
+int getJoystickDirectionalCode(int yaw, int pitch)
+{
+  if (pitch <= -3)
+  {
+    if (yaw >= 3)
+    {
+      return HID_JOYSTICK_UP_RIGHT;
+    }
+    else if (yaw <= -3)
+    {
+      return HID_JOYSTICK_UP_LEFT;
+    }
+    else
+    {
+      return HID_JOYSTICK_UP;
+    }
+  }
+  else if (pitch >= 3)
+  {
+    if (yaw >= 3)
+    {
+      return HID_JOYSTICK_DOWN_RIGHT;
+    }
+    else if (yaw <= -3)
+    {
+      return HID_JOYSTICK_DOWN_LEFT;
+    }
+    else
+    {
+      return HID_JOYSTICK_DOWN;
+    }
+  }
+  else
+  {
+    if (yaw >= 3)
+    {
+      return HID_JOYSTICK_RIGHT;
+    }
+    else if (yaw <= -3)
+    {
+      return HID_JOYSTICK_LEFT;
+    }
+    else
+    {
+      return HID_JOYSTICK_NONE;
+    }
+  }
 }
 
 byte getHIDConfig(uint8_t config)
