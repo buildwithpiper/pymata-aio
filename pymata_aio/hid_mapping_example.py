@@ -41,18 +41,15 @@ async def change_button_mapping(my_board):
     await my_board._hid_set(Constants.HID_BUTTON_RIGHT, ord('d'))
 
 async def hid_test(my_board):
-    # Enable HID
-
     await enable_hid(my_board)
 
     for i in range(20):
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1)
 
     await disable_hid(my_board)
     await my_board.shutdown()
 
 board = PymataCore()
 board.start()
-
 loop = asyncio.get_event_loop()
 loop.run_until_complete(hid_test(board))

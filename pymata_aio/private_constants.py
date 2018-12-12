@@ -119,20 +119,24 @@ class PrivateConstants:
     HID_BUTTON_JOYSTICK = 13
 
     # Piper Command Center HID joystick directional codes
-    HID_JOYSTICK_UP = 0
-    HID_JOYSTICK_UP_RIGHT = 1
-    HID_JOYSTICK_RIGHT = 2
-    HID_JOYSTICK_DOWN_RIGHT = 3
-    HID_JOYSTICK_DOWN = 4
-    HID_JOYSTICK_DOWN_LEFT = 5
-    HID_JOYSTICK_LEFT = 6
-    HID_JOYSTICK_UP_LEFT = 7
+    HID_JOYSTICK_N = 0
+    HID_JOYSTICK_NE = 1
+    HID_JOYSTICK_E = 2
+    HID_JOYSTICK_SE = 3
+    HID_JOYSTICK_S = 4
+    HID_JOYSTICK_SW = 5
+    HID_JOYSTICK_W = 6
+    HID_JOYSTICK_NW = 7
     HID_JOYSTICK_NONE = 8
 
-    # Piper Command Center HID setting codes
+    # Piper Command Center HID settings
     HID_ENABLED = 100
     HID_SETTINGS_JS_SENSITIVITY = 101
     HID_SETTING_JS_INVERTED = 102
+
+    # Piper Command Center HID setting command codes
+    HID_OFF = 0x00
+    HID_ON = 0x01
 
     # Arduino Mouse Action Codes
     MOUSE_LEFT = 1

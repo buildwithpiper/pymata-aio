@@ -27,11 +27,12 @@ import numpy as np
 import serial
 
 from constants import Constants
-from pymata_aio.pin_data import PinData
+from pin_data import PinData
 from private_constants import PrivateConstants
-from pymata_aio.pymata_serial import PymataSerial
-from pymata_aio.pymata_socket import PymataSocket
+from pymata_serial import PymataSerial
+from pymata_socket import PymataSocket
 
+from command_center_event_channels import CommandCenterEventChannels
 
 # noinspection PyCallingNonCallable,PyCallingNonCallable,PyPep8,PyBroadException,PyBroadException,PyCompatibility
 class PymataCore:
@@ -47,7 +48,7 @@ class PymataCore:
 
     def __init__(self, arduino_wait=4, sleep_tune=0.0001, log_output=False,
                  com_port=None, ip_address=None, ip_port=2000,
-                 ip_handshake='*HELLO*'):
+                 ip_handshake='*HELLO*', command_center_channels=None):
         """
         This is the "constructor" method for the PymataCore class.
 
@@ -90,6 +91,8 @@ class PymataCore:
         if log_output:
             logging.basicConfig(filename='./pymata_aio.log', filemode='w',
                                 level=logging.DEBUG)
+
+        self.command_center_event_channels = command_center_channels
 
         self.sleep_tune = sleep_tune
         self.arduino_wait = arduino_wait
@@ -2062,6 +2065,12 @@ class PymataCore:
         """
         self.query_reply_data[PrivateConstants.HID_RESPONSE] = data[1:-1]
 
+    async def enable_hid(self):
+        await self._hid_set(PrivateConstants.HID_ENABLED, PrivateConstants.HID_ON)
+
+    async def disable_hid(self):
+        await self._hid_set(PrivateConstants.HID_ENABLED, PrivateConstants.HID_OFF)
+
     async def _hid_set(self, hid_config_code, value):
         """
         Sets the response value for a given HID code
@@ -2088,13 +2097,17 @@ class PymataCore:
         self.query_reply_data[PrivateConstants.HID_RESPONSE] = None
         return hid_state_report
 
+    async def _command_center_publish(self, data):
+        if self.command_center_event_channels:
+            self.command_center_event_channels.publish(data, 'RAW')
+
     def button_name(self, button_code):
         return {
-            Constants.HID_BUTTON_UP: 'up',
-            Constants.HID_BUTTON_DOWN: 'down',
-            Constants.HID_BUTTON_LEFT: 'left',
-            Constants.HID_BUTTON_RIGHT: 'right',
-            Constants.HID_BUTTON_JOYSTICK: 'joystick'
+            PrivateConstants.HID_BUTTON_UP: 'up',
+            PrivateConstants.HID_BUTTON_DOWN: 'down',
+            PrivateConstants.HID_BUTTON_LEFT: 'left',
+            PrivateConstants.HID_BUTTON_RIGHT: 'right',
+            PrivateConstants.HID_BUTTON_JOYSTICK: 'joystick'
         }[button_code]
 
     async def _command_center_button_response(self, data):
@@ -2108,19 +2121,21 @@ class PymataCore:
             action = "Right Mouse Button"
         else:
             action = chr(action)
-
-        print("CC_EVENT: {} BUTTON {}, ACTION: '{}'".format(button, buttonStatus, action))
+        #{'event': "CC_BUTTON_EVENT", 'button': button,
+        # 'buttonStatus': buttonStatus}
+        message = "CC_EVENT: {} BUTTON {}, ACTION: '{}'".format(button, buttonStatus, action)
+        await self._command_center_publish(message)
 
     def direction_name(self, direction_code):
         return {
-            PrivateConstants.HID_JOYSTICK_UP: 'UP',
-            PrivateConstants.HID_JOYSTICK_UP_RIGHT: 'UP-RIGHT',
-            PrivateConstants.HID_JOYSTICK_RIGHT: 'RIGHT',
-            PrivateConstants.HID_JOYSTICK_DOWN_RIGHT: 'DOWN-RIGHT',
-            PrivateConstants.HID_JOYSTICK_DOWN: 'DOWN',
-            PrivateConstants.HID_JOYSTICK_DOWN_LEFT: 'DOWN-LEFT',
-            PrivateConstants.HID_JOYSTICK_LEFT: 'LEFT',
-            PrivateConstants.HID_JOYSTICK_UP_LEFT: 'UP-LEFT',
+            PrivateConstants.HID_JOYSTICK_N: 'NORTH',
+            PrivateConstants.HID_JOYSTICK_NE: 'NORTH-EAST',
+            PrivateConstants.HID_JOYSTICK_E: 'EAST',
+            PrivateConstants.HID_JOYSTICK_SE: 'SOUTH-EAST',
+            PrivateConstants.HID_JOYSTICK_S: 'SOUTH',
+            PrivateConstants.HID_JOYSTICK_SW: 'SOUTH-WEST',
+            PrivateConstants.HID_JOYSTICK_W: 'WEST',
+            PrivateConstants.HID_JOYSTICK_NW: 'NORTH-WEST',
             PrivateConstants.HID_JOYSTICK_NONE: 'NONE'
         }[direction_code]
 
@@ -2128,7 +2143,8 @@ class PymataCore:
         direction = self.direction_name(data[1])
         pitch = np.int8(data[2])
         yaw = np.int8(data[3])
-        print("CC_EVENT: JOYSTICK, D: {}, P: {}, Y: {}".format(direction, pitch, yaw))
+        message = "CC_EVENT: JOYSTICK, DIR: {}, dX: {}, dY: {}".format(direction, pitch, yaw)
+        await self._command_center_publish(message)
 
 if __name__ == "__main__":
     print("Initializing Board...")
