@@ -25,11 +25,11 @@ import time
 # noinspection PyPackageRequirements
 import serial
 
-from pymata_aio.constants import Constants
-from pymata_aio.pin_data import PinData
-from pymata_aio.private_constants import PrivateConstants
-from pymata_aio.pymata_serial import PymataSerial
-from pymata_aio.pymata_socket import PymataSocket
+from constants import Constants
+from pin_data import PinData
+from private_constants import PrivateConstants
+from pymata_serial import PymataSerial
+from pymata_socket import PymataSocket
 
 
 # noinspection PyCallingNonCallable,PyCallingNonCallable,PyPep8,PyBroadException,PyBroadException,PyCompatibility
@@ -127,7 +127,9 @@ class PymataCore:
                                    PrivateConstants.ENCODER_DATA:
                                        self._encoder_data,
                                    PrivateConstants.PIXY_DATA:
-                                       self._pixy_data}
+                                       self._pixy_data,
+                                    PrivateConstants.CC_RESPONSE: 
+                                        self._command_center_response}
 
         # report query results are stored in this dictionary
         self.query_reply_data = {PrivateConstants.REPORT_VERSION: '',
@@ -135,7 +137,8 @@ class PymataCore:
                                  PrivateConstants.REPORT_FIRMWARE: '',
                                  PrivateConstants.CAPABILITY_RESPONSE: None,
                                  PrivateConstants.ANALOG_MAPPING_RESPONSE: None,
-                                 PrivateConstants.PIN_STATE_RESPONSE: None}
+                                 PrivateConstants.PIN_STATE_RESPONSE: None,
+                                 PrivateConstants.CC_RESPONSE: None}
 
         # An i2c_map entry consists of a device i2c address as the key, and
         #  the value of the key consists of a dictionary containing 3 entries.
@@ -1405,7 +1408,10 @@ class PymataCore:
                         await asyncio.sleep(self.sleep_tune)
                         next_command_byte = await self.read()
                         sysex.append(next_command_byte)
-                    await self.command_dictionary[sysex[0]](sysex)
+                    if sysex[0] in self.command_dictionary:
+                        await self.command_dictionary[sysex[0]](sysex)
+                    # else:
+                    #     print("no handler for command {}".format(sysex[0]))
                     sysex = []
                     await asyncio.sleep(self.sleep_tune)
                 # if this is an analog message, process it.
@@ -2040,3 +2046,38 @@ class PymataCore:
             current_command.append(next_command_byte)
             number_of_bytes -= 1
         return current_command
+
+    def set_command_center_callback(self, callback):
+        self.command_dictionary[PrivateConstants.CC_EVENT] = callback
+
+    async def command_center_set(self, cc_config, value):
+        """
+        Sets the value for the given command center configuration ID
+        This is used for updating button mappings and general settings
+        """
+        data = [cc_config, value]
+        await self._send_sysex(PrivateConstants.CC_SET, data)
+
+    async def command_center_get(self, cc_config):
+        """
+        This method retrieves the value for a given command center
+        button mapping or setting
+        :param cc_config: the ID of the configuration to get 
+        :returns: configuration value
+        """
+        await self._send_sysex(PrivateConstants.CC_GET, [cc_config])
+        while self.query_reply_data.get(
+                PrivateConstants.CC_RESPONSE) is None:
+            await asyncio.sleep(self.sleep_tune)
+        cc_state_report = self.query_reply_data.get(
+                PrivateConstants.CC_RESPONSE)
+        self.query_reply_data[PrivateConstants.CC_RESPONSE] = None
+        return cc_state_report[1]
+
+    async def _command_center_response(self, data):
+        """
+        This handles command center query responses.
+        :param data: query response
+        :returns: None - but response is saved
+        """
+        self.query_reply_data[PrivateConstants.CC_RESPONSE] = data[1:-1]

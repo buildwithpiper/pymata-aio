@@ -103,3 +103,8 @@ class PrivateConstants:
     # Pin used to store Pixy data
     PIN_PIXY_MOSI = 11
 
+    # Piper Command Center commands
+    CC_GET = 0x00
+    CC_SET = 0x01
+    CC_RESPONSE = 0x02
+    CC_EVENT = 0x03
